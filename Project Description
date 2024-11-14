@@ -1,0 +1,24 @@
+# MultiModal-AI-Transcriber
+This code sets up a Gradio-based application with two main functionalities: audio transcription and response generation, as well as image-to-text extraction with translation. Here’s a summary of the features:
+
+Required Libraries:
+
+Installs various libraries including transformers for Hugging Face models, gTTS for text-to-speech, pytesseract for OCR, and deep-translator for translation.
+Audio Transcription and AI Response:
+
+Whisper Model: Uses OpenAI's Whisper model for automatic speech recognition (ASR) to transcribe audio.
+OpenAI GPT-4 Integration: Generates a response based on the transcribed text by interacting with OpenAI's ChatCompletion API.
+Translation: Translates the AI-generated response to a selected target language using deep-translator.
+Text-to-Speech: Converts the translated AI response into an audio file using gTTS.
+Image-to-Text Extraction with Translation and Speech:
+
+OCR with Tesseract: Extracts text from an uploaded image.
+Translation: Translates the extracted text to a specified target language.
+Text-to-Speech: Converts the translated text into audio.
+Gradio Interface Setup:
+
+Audio Tab: Allows users to upload audio, select a translation language, and view the transcription along with the AI-generated response in both text and audio formats.
+Image Tab: Enables users to upload an image, select a translation language, and get both the extracted text and its audio representation.
+User Flow:
+
+Users can interact with either tab, depending on whether they have audio or image inputs. Each tab processes the uploaded file, generates the output, and displays both text and audio.
