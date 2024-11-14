@@ -1,0 +1,152 @@
+# Install necessary libraries
+!pip install --upgrade openai
+!pip install --upgrade openai
+!pip install openai==0.28
+!pip install transformers
+!pip install gtts
+!pip install torch
+!pip install sentencepiece
+!pip install pytesseract
+!apt-get install -y tesseract-ocr
+!pip install --upgrade deep-translator
+
+# Imports
+import os
+import gradio as gr
+import torch
+from transformers import pipeline
+import openai  # Corrected import
+from gtts import gTTS
+from PIL import Image
+import pytesseract
+import tempfile
+from deep_translator import GoogleTranslator
+
+# Load Whisper model for audio transcription
+device = 0 if torch.cuda.is_available() else -1  # Adjusted for transformers pipeline
+whisper_model = pipeline("automatic-speech-recognition", model="openai/whisper-small", device=device)
+
+# Set your OpenAI API key directly here (Hardcoding, not recommended for production)
+api_key = "YOUR_OPENAI_API_KEY"
+# Instantiate the OpenAI client with the API key
+openai.api_key = api_key
+
+# Initialize system-user messages
+sys_usr_messages = [
+    {"role": "system", "content": "You are ChatGPT, a helpful assistant."}
+]
+
+# Function to convert text into speech using gTTS
+def text_to_speech(text, lang="en"):
+    try:
+        tts = gTTS(text=text, lang=lang)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+            tts.save(fp.name)
+            return fp.name  # Return path to the saved audio file
+    except Exception as e:
+        return f"Text-to-Speech Error: {str(e)}"
+
+# Function to translate text using deep-translator
+def translate_text(text, target_language="es"):
+    try:
+        translated_text = GoogleTranslator(source='auto', target=target_language).translate(text)
+        return translated_text
+    except Exception as e:
+        return f"Translation Error: {str(e)}"
+
+# Function to transcribe text from an image using OCR (Tesseract) and return text/audio
+def transcribe_image(image, target_language):
+    try:
+        # Extract text from image using Tesseract
+        text = pytesseract.image_to_string(Image.open(image))
+
+        # Translate the extracted text
+        translated_text = translate_text(text, target_language=target_language)
+
+        # Convert the translated text to speech
+        audio_output = text_to_speech(translated_text, lang=target_language)
+
+        return f"Extracted Text:\n{text}\n\nTranslated Text:\n{translated_text}", audio_output
+    except Exception as e:
+        return f"Error processing image: {e}", None
+
+# Function to transcribe audio, generate AI responses, and convert response to speech
+def transcribe_audio(audio, target_language="en"):
+    global sys_usr_messages
+
+    # Check if the audio file exists
+    if not os.path.exists(audio):
+        return "Audio file not found.", None
+
+    try:
+        # Step 1: Transcribe the audio using Hugging Face Whisper model
+        transcript = whisper_model(audio)["text"]
+
+        # Add the transcription to the system-user messages
+        sys_usr_messages.append({"role": "user", "content": transcript})
+
+        # Step 2: Generate a response using the OpenAI ChatCompletion API
+        chat_response = openai.ChatCompletion.create(
+            model="gpt-4",  # You can switch to "gpt-3.5-turbo" if using GPT-3.5 model
+            messages=sys_usr_messages
+        )
+
+        # Get the assistant's response
+        response = chat_response.choices[0].message.content
+
+        # Step 3: Translate the response to the target language
+        translated_response = translate_text(response, target_language=target_language)
+
+        # Step 4: Convert the translated AI response to speech
+        response_audio = text_to_speech(translated_response, lang=target_language)
+
+        # Combine transcription and GPT response
+        final_output = (
+            f"Transcription:\n{transcript}\n\n"
+            f"AI Response (Translated to {target_language}):\n{translated_response}\n"
+        )
+
+        return final_output, response_audio
+
+    except Exception as e:
+        # Return any errors encountered
+        return f"An error occurred: {str(e)}", None
+
+# Set up the Gradio interface
+def build_interface():
+    with gr.Blocks() as ui:
+        # Audio Input Tab for Transcription and Generative AI Response
+        with gr.Tab("Audio to Transcription and AI Response"):
+            audio_input = gr.Audio(type="filepath", label="Upload Audio")
+            language_input_audio = gr.Dropdown(choices=["en", "es", "fr", "de", "zh-cn"], label="Select Translation Language", value="en")
+            text_output = gr.Textbox(label="Transcription and AI Response")
+            audio_output = gr.Audio(label="Generated AI Response Audio")
+
+            # Submit Button for Audio Processing
+            submit_audio_button = gr.Button("Process Audio")
+            submit_audio_button.click(
+                transcribe_audio,
+                inputs=[audio_input, language_input_audio],
+                outputs=[text_output, audio_output]
+            )
+
+        # Image to Text Tab with Translation and Text-to-Speech
+        with gr.Tab("Image to Text and Speech"):
+            image_input = gr.Image(type="filepath", label="Upload Image")
+            language_input_img = gr.Dropdown(choices=["en", "es", "fr", "de", "zh-cn"], label="Select Translation Language", value="en")
+            image_text_output = gr.Textbox(label="Extracted and Translated Text")
+            image_audio_output = gr.Audio(label="Generated Speech Audio")
+
+            # Submit Button for Image Processing
+            submit_image_button = gr.Button("Process Image")
+            submit_image_button.click(
+                transcribe_image,
+                inputs=[image_input, language_input_img],
+                outputs=[image_text_output, image_audio_output]
+            )
+
+    return ui
+
+# Launch the Gradio UI
+ui = build_interface()
+ui.launch()
